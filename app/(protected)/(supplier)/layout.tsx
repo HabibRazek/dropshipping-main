@@ -1,0 +1,21 @@
+import React, { ReactNode } from "react";
+import { currentRole, currentUser } from "@/lib/auth";
+import { UserRole } from "@prisma/client";
+import { redirect } from "next/navigation";
+
+export default async function Layout({ children }: { children: ReactNode }) {
+  const role = await currentRole();
+
+  if (role !== UserRole.SUPPLIER) {
+    if (role === UserRole.ADMIN) {
+      return redirect("/dashboard");
+    }
+    return redirect("/unauthorized");
+  }
+
+  return (
+    <>
+      <div className="">{children}</div>
+    </>
+  );
+}

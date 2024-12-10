@@ -1,0 +1,428 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TransactionType {
+  CHARGE
+  RETRIEVE
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  SUPPLIER
+}
+
+enum ProductRequestType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ProductRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum NotificationAction {
+  APPROVE_PRODUCT_REQUEST
+  REJECT_PRODUCT_REQUEST
+  PRODUCT_DELETED
+  PRODUCT_UPDATED
+  ORDER_RECEIVED
+}
+
+enum StoreType {
+  WOOCOMMERCE
+  SHOPIFY
+  YOUCAN
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum OrderConfirmationStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum StoreStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum DeliveryType {
+  DELIVERY_TO_CLIENT
+  DELIVERY_TO_SELLER
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  name                  String?
+  email                 String?                @unique
+  emailVerified         DateTime?
+  phoneNumber           String?
+  address               String?
+  city                  String?
+  postalCode            String?
+  image                 String?
+  password              String?
+  role                  UserRole               @default(USER)
+  wallet                Float                  @default(0)
+  transactions          Transaction[]
+  accounts              Account[]
+  isTwoFactorEnabled    Boolean                @default(false)
+  twoFactorConfirmation TwoFactorConfirmation?
+  supplier              Supplier?
+  products              Product[]
+  stores                Store[]
+  notifications         Notification[]
+  isDeleted             Boolean                @default(false)
+}
+
+model Supplier {
+  id                    String           @id @default(cuid())
+  userId                String           @unique
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socialReason          String
+  taxRegistrationNumber String
+  products              Product[]
+  productRequests       ProductRequest[]
+  orders                OrderSupplier[]
+  isDeleted             Boolean          @default(false)
+}
+
+model Product {
+  id                    String              @id @default(cuid())
+  name                  String
+  description           String
+  price                 Float
+  stock                 Int
+  images                Image[]
+  categoryId            String
+  category              Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  supplierId            String?
+  supplier              Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  userId                String?
+  user                  User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stores                Store[]
+  productAddEditRequest ProductRequest[]
+  orderItems            OrderItem[]
+  orderSupplierItems    OrderSupplierItem[]
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  productStoreItem      ProductStoreItem[]
+  isDeleted             Boolean             @default(false)
+
+  @@index([supplierId, categoryId, userId])
+}
+
+model Category {
+  id              String           @id @default(cuid())
+  name            String
+  description     String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  products        Product[]
+  productRequests ProductRequest[]
+  isDeleted       Boolean          @default(false)
+}
+
+model Image {
+  id               String          @id @default(cuid())
+  productId        String?
+  product          Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productRequestId String?
+  productRequest   ProductRequest? @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
+  url              String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  isDeleted        Boolean         @default(false)
+
+  @@index([productId, productRequestId])
+}
+
+model ProductRequest {
+  id              String               @id @default(cuid())
+  type            ProductRequestType
+  supplierId      String?
+  supplier        Supplier?            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  name            String?
+  description     String?
+  price           Float?
+  categoryId      String?
+  category        Category?            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  images          Image[]
+  productId       String?
+  product         Product?             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  approvisionment Approvisionment?
+  status          ProductRequestStatus @default(PENDING)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  isDeleted       Boolean              @default(false)
+
+  @@index([supplierId, categoryId, productId])
+}
+
+model Approvisionment {
+  id               String         @id @default(cuid())
+  approvisionment  DateTime
+  quantity         Int
+  productRequestId String
+  productRequest   ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
+  isDeleted        Boolean        @default(false)
+
+  @@unique([productRequestId])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  link      String
+  action    NotificationAction
+  read      Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  isDeleted Boolean            @default(false)
+
+  @@index([userId])
+}
+
+model Store {
+  id               String             @id @default(cuid())
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  link             String
+  CONSUMER_KEY     String
+  CONSUMER_SECRET  String
+  webhookId        String
+  type             StoreType          @default(WOOCOMMERCE)
+  products         Product[]
+  orders           Order[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  productStoreItem ProductStoreItem[]
+  isDeleted        Boolean            @default(false)
+
+  @@index([userId])
+}
+
+model ProductStoreItem {
+  id                   String  @id @default(cuid())
+  productId            String
+  product              Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId              String
+  store                Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productWoocommerceId Int
+
+  @@unique([productId, storeId])
+}
+
+model Order {
+  id                 String                  @id @default(cuid())
+  orderNumber        String?                 
+  storeId            String
+  store              Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderItems         OrderItem[]
+  confirmationStatus OrderConfirmationStatus @default(PENDING)
+  status             OrderStatus             @default(PENDING)
+  deliveryType       DeliveryType            @default(DELIVERY_TO_CLIENT)
+  totalStandard      Float
+  totalBase          Float
+  gain               Float
+  shipping           OrderShipping?
+  billing            OrderBilling?
+  sellerBilling      OrderSellerBilling?
+  suppliersOrders    OrderSupplier[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  isDeleted          Boolean                 @default(false)
+
+  @@index([storeId])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int
+  price     Float
+  basePrice Float    
+  name      String   
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId, productId])
+}
+
+model OrderSupplier {
+  id                 String                  @id @default(cuid())
+  orderId            String
+  order              Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderNumber        String?                 
+  supplierId         String
+  supplier           Supplier                @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  orderItems         OrderSupplierItem[]
+  confirmationStatus OrderConfirmationStatus @default(PENDING)
+  status             OrderStatus             @default(PENDING)
+  total              Float
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  isDeleted          Boolean                 @default(false)
+
+  @@index([orderId, supplierId])
+}
+
+model OrderSupplierItem {
+  id              String        @id @default(cuid())
+  orderSupplierId String
+  orderSupplier   OrderSupplier @relation(fields: [orderSupplierId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity        Int
+  price           Float
+  basePrice       Float         @default(10)
+  name            String        
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([orderSupplierId, productId])
+}
+
+model OrderShipping {
+  id         String @id @default(cuid())
+  orderId    String
+  order      Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  firstName  String
+  lastName   String
+  address    String
+  phone      String
+  city       String
+  postalCode String
+
+  @@unique([orderId])
+}
+
+model OrderBilling {
+  id         String @id @default(cuid())
+  orderId    String
+  order      Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  firstName  String
+  lastName   String
+  address    String
+  phone      String
+  email      String
+  city       String
+  postalCode String
+
+  @@unique([orderId])
+}
+
+model OrderSellerBilling {
+  id         String @id @default(cuid())
+  orderId    String
+  order      Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  firstName  String
+  lastName   String
+  address    String
+  phone      String
+  email      String
+  city       String
+  postalCode String
+
+  @@unique([orderId])
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Float
+  type        TransactionType
+  description String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  isDeleted   Boolean         @default(false)
+
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isDeleted         Boolean @default(false)
+
+  @@unique([provider, providerAccountId])
+}
+
+model VerificationToken {
+  id       String   @id @default(cuid())
+  oldEmail String?
+  email    String
+  token    String   @unique
+  expires  DateTime
+
+  @@unique([email, token])
+}
+
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  @@unique([email, token])
+}
+
+model TwoFactorToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  @@unique([email, token])
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model TwoFactorConfirmation {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+}
